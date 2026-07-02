@@ -433,3 +433,25 @@ python evaluate.py --checkpoint checkpoints/finetune/best_model_full_finetune.pt
 - `exports/<checkpoint_name>.pt` — TorchScript traced model
 
 Both formats support dynamic batch sizes and are verified against the original model during export. ONNX verification requires the `onnx` package (`pip install onnx`).
+
+---
+
+## Evaluation Results
+
+After completing SimCLR pre-training and supervised fine-tuning, the model is evaluated on the test set.
+
+### 1. ROC Curves
+Per-class ROC curves for the top prevalent classes, demonstrating the model's discriminative ability across different pathologies.
+![ROC Curves](logs/roc_curves.png)
+
+### 2. Encoder Embeddings (t-SNE)
+t-SNE visualization of the encoder features, colored by the primary pathology. This shows how well the model groups similar images together.
+![t-SNE](logs/tsne.png)
+
+### 3. Grad-CAM Interpretability
+Grad-CAM heatmaps overlaying the original X-rays to highlight the regions the model focuses on when predicting specific pathologies (e.g., Pneumonia).
+![Grad-CAM](logs/gradcam_pneumonia.png)
+
+### 4. Training Loss
+Loss curves during the pre-training and fine-tuning phases.
+![Loss Curves](logs/loss_curves.png)
