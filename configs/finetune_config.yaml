@@ -16,7 +16,7 @@ model:
 training:
   mode: "full_finetune"    # options: linear_probe | full_finetune | imagenet_baseline
   epochs: 50
-  batch_size: 64
+  batch_size: 32
   optimizer: "adamw"
   lr: 1.0e-4
   backbone_lr_multiplier: 0.1

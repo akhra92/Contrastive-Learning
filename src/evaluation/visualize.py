@@ -60,7 +60,7 @@ def plot_tsne(
         n_components=2,
         perplexity=perplexity,
         random_state=42,
-        n_iter=1000,
+        max_iter=1000,
     ).fit_transform(features)
 
     fig, ax = plt.subplots(figsize=(10, 8))

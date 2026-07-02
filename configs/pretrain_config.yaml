@@ -13,7 +13,7 @@ model:
 
 training:
   epochs: 100
-  batch_size: 256
+  batch_size: 32
   temperature: 0.1
   optimizer: "adam"
   lr: 3.0e-4
