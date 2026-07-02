@@ -142,14 +142,14 @@ def main():
         )
 
     if not args.no_gradcam:
-        # Show GradCAM for Pneumonia (index 7) on a few test images
+        # Show GradCAM for Cardiomegaly (index 2) on a few test images
         sample_images, _ = next(iter(test_loader))
         plot_gradcam(
             model=model,
             images=sample_images[:8],
-            target_class_idx=7,  # Pneumonia
+            target_class_idx=2,  # Cardiomegaly
             device=device,
-            save_path=os.path.join(args.output_dir, "gradcam_pneumonia.png"),
+            save_path=os.path.join(args.output_dir, "gradcam_cardiomegaly.png"),
         )
 
     # ------------------------------------------------------------------ #

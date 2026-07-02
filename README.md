@@ -449,8 +449,8 @@ t-SNE visualization of the encoder features, colored by the primary pathology. T
 ![t-SNE](assets/tsne.png)
 
 ### 3. Grad-CAM Interpretability
-Grad-CAM heatmaps overlaying the original X-rays to highlight the regions the model focuses on when predicting specific pathologies (e.g., Pneumonia).
-![Grad-CAM](assets/gradcam_pneumonia.png)
+Grad-CAM heatmaps overlaying the original X-rays to highlight the regions the model focuses on when predicting specific pathologies (e.g., Cardiomegaly).
+![Grad-CAM](assets/gradcam_cardiomegaly.png)
 
 ### 4. Training Loss
 Loss curves during the pre-training and fine-tuning phases.
