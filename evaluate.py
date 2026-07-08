@@ -21,7 +21,12 @@ from torch.utils.data import DataLoader
 
 from src.data.augmentations import FinetuneAugmentation
 from src.data.dataset import ALL_CLASSES, ChestXrayDataset
-from src.evaluation.metrics import collect_predictions, evaluate_multilabel, print_metrics
+from src.evaluation.metrics import (
+    collect_predictions,
+    evaluate_multilabel,
+    print_metrics,
+    tune_thresholds,
+)
 from src.evaluation.visualize import plot_gradcam, plot_loss_curves, plot_roc_curves, plot_tsne
 from src.models.classifier import ChestXrayClassifier
 from src.models.encoder import SimCLREncoder
@@ -143,24 +148,54 @@ def main():
     # ------------------------------------------------------------------ #
     # Compute metrics                                                       #
     # ------------------------------------------------------------------ #
+    # Tune per-class F1 thresholds on the VALIDATION set (never the test set),
+    # then apply them to the test set. Training uses BCE with pos_weight, so
+    # logits aren't calibrated around 0.5 and a fixed 0.5 threshold gives poor
+    # F1 despite good ranking (AUC/AP). AUC and AP are threshold-free.
+    print("\nTuning F1 thresholds on the validation set …")
+    val_df = pd.read_csv(os.path.join(data_cfg["processed_dir"], "val.csv"))
+    val_ds = ChestXrayDataset(val_df, image_dir, transform=test_aug)
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=config["training"]["batch_size"] * 2,
+        shuffle=False,
+        num_workers=data_cfg["num_workers"],
+        pin_memory=data_cfg["pin_memory"] and device.type != "mps",
+    )
+    y_true_val, y_logits_val = collect_predictions(model, val_loader, device)
+    thresholds = tune_thresholds(y_true_val, y_logits_val)
+
     print("\nRunning inference on test set …")
     y_true, y_pred_logits = collect_predictions(model, test_loader, device)
-    metrics = evaluate_multilabel(y_true, y_pred_logits)
+
+    # Baseline (fixed 0.5) vs tuned per-class thresholds — reported side by side.
+    metrics_default = evaluate_multilabel(y_true, y_pred_logits, threshold=0.5)
+    metrics = evaluate_multilabel(y_true, y_pred_logits, threshold=thresholds)
     print_metrics(metrics)
+    print(
+        f"Macro F1 @0.5 (fixed) : {metrics_default['macro_f1']:.4f}"
+        f"   →   Macro F1 (tuned): {metrics['macro_f1']:.4f}"
+    )
 
     # Save metrics to file
     os.makedirs(args.output_dir, exist_ok=True)
     mode_str = config["training"]["mode"]
     metrics_path = os.path.join(args.output_dir, f"metrics_{mode_str}.txt")
     with open(metrics_path, "w") as mf:
-        mf.write(f"{'Class':<25} {'AUC-ROC':>8} {'Avg-Prec':>10} {'F1':>8}\n")
+        mf.write("F1 uses per-class thresholds tuned on the validation set.\n")
+        mf.write("AUC-ROC and Avg-Prec are threshold-free.\n\n")
+        mf.write(f"{'Class':<25} {'AUC-ROC':>8} {'Avg-Prec':>10} {'F1':>8} {'Thresh':>8}\n")
         for cls_name in ALL_CLASSES:
             if cls_name in metrics:
                 m = metrics[cls_name]
-                mf.write(f"{cls_name:<25} {m['auc_roc']:>8.4f} {m['avg_precision']:>10.4f} {m['f1']:>8.4f}\n")
+                mf.write(
+                    f"{cls_name:<25} {m['auc_roc']:>8.4f} {m['avg_precision']:>10.4f}"
+                    f" {m['f1']:>8.4f} {m['threshold']:>8.3f}\n"
+                )
         mf.write(f"\nMacro AUC-ROC     : {metrics['macro_auc_roc']:.4f}\n")
         mf.write(f"Macro Avg-Prec    : {metrics['macro_ap']:.4f}\n")
-        mf.write(f"Macro F1          : {metrics['macro_f1']:.4f}\n")
+        mf.write(f"Macro F1 (tuned)  : {metrics['macro_f1']:.4f}\n")
+        mf.write(f"Macro F1 (@0.5)   : {metrics_default['macro_f1']:.4f}\n")
     print(f"Metrics saved to {metrics_path}")
 
     # ------------------------------------------------------------------ #
