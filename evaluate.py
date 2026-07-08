@@ -20,7 +20,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from src.data.augmentations import FinetuneAugmentation
-from src.data.dataset import ChestXrayDataset
+from src.data.dataset import ALL_CLASSES, ChestXrayDataset
 from src.evaluation.metrics import collect_predictions, evaluate_multilabel, print_metrics
 from src.evaluation.visualize import plot_gradcam, plot_loss_curves, plot_roc_curves, plot_tsne
 from src.models.classifier import ChestXrayClassifier
@@ -50,6 +50,44 @@ def parse_args():
     )
     p.add_argument("--export_dir", default="exports", help="Directory for exported models")
     return p.parse_args()
+
+
+def select_gradcam_images(model, loader, target_class_idx, device, n_images=8, threshold=0.5):
+    """
+    Select test images the model *correctly identifies* as having the target
+    pathology: ground-truth positive AND predicted positive (prob >= threshold),
+    ranked by the model's predicted probability (most confident first).
+
+    Grad-CAM only explains a prediction meaningfully when that prediction is both
+    correct and confident, so restricting to true positives keeps the saliency
+    maps interpretable. Returns a (n, 1, H, W) tensor, or None if no correctly
+    identified positive image exists.
+    """
+    model.eval()
+    pos_images, pos_scores = [], []
+
+    with torch.no_grad():
+        for images, labels in loader:
+            mask = labels[:, target_class_idx] == 1
+            if not mask.any():
+                continue
+            sel = images[mask]
+            logits = model(sel.to(device))
+            scores = torch.sigmoid(logits[:, target_class_idx]).cpu()
+            correct = scores >= threshold  # keep only true positives
+            if not correct.any():
+                continue
+            pos_images.append(sel[correct])
+            pos_scores.append(scores[correct])
+
+    if not pos_images:
+        return None
+
+    pos_images = torch.cat(pos_images, dim=0)
+    pos_scores = torch.cat(pos_scores, dim=0)
+    order = torch.argsort(pos_scores, descending=True)
+    top = order[: min(n_images, len(order))]
+    return pos_images[top]
 
 
 def main():
@@ -116,7 +154,6 @@ def main():
     metrics_path = os.path.join(args.output_dir, f"metrics_{mode_str}.txt")
     with open(metrics_path, "w") as mf:
         mf.write(f"{'Class':<25} {'AUC-ROC':>8} {'Avg-Prec':>10} {'F1':>8}\n")
-        from src.data.dataset import ALL_CLASSES
         for cls_name in ALL_CLASSES:
             if cls_name in metrics:
                 m = metrics[cls_name]
@@ -142,15 +179,27 @@ def main():
         )
 
     if not args.no_gradcam:
-        # Show GradCAM for Cardiomegaly (index 2) on a few test images
-        sample_images, _ = next(iter(test_loader))
-        plot_gradcam(
-            model=model,
-            images=sample_images[:8],
-            target_class_idx=2,  # Cardiomegaly
-            device=device,
-            save_path=os.path.join(args.output_dir, "gradcam_cardiomegaly.png"),
+        # GradCAM only makes sense on images that actually contain the target
+        # pathology. Select test images that are ground-truth positive for the
+        # target class, ranked by the model's own confidence, so the saliency
+        # map explains a correct, confident prediction (not a random negative).
+        target_class_idx = 2  # Cardiomegaly
+        gradcam_images = select_gradcam_images(
+            model, test_loader, target_class_idx, device, n_images=8
         )
+        if gradcam_images is None:
+            print(
+                f"No positive '{ALL_CLASSES[target_class_idx]}' images found in the "
+                "test set; skipping GradCAM."
+            )
+        else:
+            plot_gradcam(
+                model=model,
+                images=gradcam_images,
+                target_class_idx=target_class_idx,
+                device=device,
+                save_path=os.path.join(args.output_dir, "gradcam_cardiomegaly.png"),
+            )
 
     # ------------------------------------------------------------------ #
     # Model export                                                          #

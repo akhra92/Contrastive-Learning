@@ -168,9 +168,12 @@ def plot_gradcam(
     target_layers = get_gradcam_target_layer(model.encoder)
 
     cam = GradCAM(model=model, target_layers=target_layers)
-    targets = [ClassifierOutputTarget(target_class_idx)]
 
     imgs_to_show = images[:n_images].to(device)
+    # One target per image: pytorch_grad_cam zips targets with the batch, so a
+    # single-element list would only produce a real CAM for the first image and
+    # leave the rest near-zero (blank overlays).
+    targets = [ClassifierOutputTarget(target_class_idx)] * len(imgs_to_show)
     grayscale_cam = cam(input_tensor=imgs_to_show, targets=targets)
 
     fig, axes = plt.subplots(2, n_images, figsize=(4 * n_images, 8))
