@@ -23,53 +23,92 @@ from src.data.dataset import ALL_CLASSES
 # 1. t-SNE embeddings
 # ---------------------------------------------------------------------------
 
+# Curated set of clinically distinct classes for a legible t-SNE. The full
+# 15-way multi-label space is too entangled to colour meaningfully, so we plot
+# a balanced subset of single-label images from these classes.
+_TSNE_DEFAULT_CLASSES = [
+    "No Finding",
+    "Cardiomegaly",
+    "Effusion",
+    "Pneumothorax",
+    "Emphysema",
+]
+
+
 def plot_tsne(
     encoder,
     loader,
     device,
     save_path: str = "logs/tsne.png",
-    n_samples: int = 3000,
-    perplexity: int = 30,
+    classes: list = None,
+    max_per_class: int = 400,
+    perplexity: int = 35,
 ):
     """
-    Extract encoder features and visualise with t-SNE.
-    Colour each point by its primary (first-listed) pathology label.
+    Visualise encoder features with t-SNE using a balanced set of *single-label*
+    test images from a curated list of clinically distinct classes.
+
+    Why this design:
+      - Multi-label images have no single "true" colour; using argmax over all 15
+        classes (dominated by "No Finding") produces an uninterpretable blob.
+      - Restricting to single-label images and balancing the number of samples
+        per class gives an honest, legible view of how the encoder groups
+        pathologies. Only classes with genuine structure will separate.
     """
     from sklearn.manifold import TSNE
 
-    encoder.eval()
-    features, primary_labels = [], []
+    if classes is None:
+        classes = _TSNE_DEFAULT_CLASSES
+    class_idx = [ALL_CLASSES.index(c) for c in classes]
+    counts = {ci: 0 for ci in class_idx}
 
-    collected = 0
+    encoder.eval()
+    features, labels_out = [], []
     with torch.no_grad():
         for images, labels in loader:
-            if collected >= n_samples:
+            label_np = labels.numpy() if hasattr(labels, "numpy") else np.asarray(labels)
+            single = label_np.sum(axis=1) == 1  # keep only single-label images
+            if not single.any():
+                continue
+            primary = label_np.argmax(axis=1)
+            keep = []
+            for b in np.where(single)[0]:
+                ci = int(primary[b])
+                if ci in counts and counts[ci] < max_per_class:
+                    keep.append(b)
+                    counts[ci] += 1
+            if keep:
+                h = encoder(images[keep].to(device))
+                features.append(h.cpu().numpy())
+                labels_out.extend(int(primary[b]) for b in keep)
+            if all(counts[ci] >= max_per_class for ci in class_idx):
                 break
-            images = images.to(device)
-            h = encoder(images)
-            features.append(h.cpu().numpy())
-            # Use argmax as a proxy "primary" label for colouring
-            primary_labels.append(labels.numpy().argmax(axis=1))
-            collected += images.size(0)
 
-    features = np.concatenate(features, axis=0)[:n_samples]
-    primary_labels = np.concatenate(primary_labels, axis=0)[:n_samples]
+    if not features:
+        print("t-SNE skipped: no single-label samples found for the selected classes.")
+        return
 
-    print(f"Running t-SNE on {len(features)} samples …")
+    features = np.concatenate(features, axis=0)
+    labels_out = np.asarray(labels_out)
+
+    print(f"Running t-SNE on {len(features)} single-label samples …")
     emb = TSNE(
         n_components=2,
         perplexity=perplexity,
         random_state=42,
         max_iter=1000,
+        init="pca",
     ).fit_transform(features)
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    scatter = ax.scatter(emb[:, 0], emb[:, 1], c=primary_labels, cmap="tab20", s=4, alpha=0.7)
-    cbar = fig.colorbar(scatter, ax=ax, ticks=range(len(ALL_CLASSES)))
-    cbar.ax.set_yticklabels(ALL_CLASSES, fontsize=7)
-    ax.set_title("t-SNE of Encoder Embeddings", fontsize=14)
-    ax.set_xlabel("t-SNE 1")
-    ax.set_ylabel("t-SNE 2")
+    cmap = plt.get_cmap("tab10")
+    for j, ci in enumerate(class_idx):
+        m = labels_out == ci
+        if not m.any():
+            continue
+        ax.scatter(emb[m, 0], emb[m, 1], s=10, alpha=0.75, color=cmap(j), label=ALL_CLASSES[ci])
+    ax.set_title("t-SNE of Encoder Embeddings (single-label test images)", fontsize=14)
+    ax.legend(markerscale=2, fontsize=9, loc="best")
     ax.axis("off")
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)

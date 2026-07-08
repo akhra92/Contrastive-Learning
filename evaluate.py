@@ -170,12 +170,20 @@ def main():
     plot_loss_curves(log_dir=args.output_dir, save_path=os.path.join(args.output_dir, "loss_curves.png"))
 
     if not args.no_tsne:
+        # Shuffled loader so the class-balanced t-SNE sample is drawn from across
+        # the whole test set, not just the first images.
+        tsne_loader = DataLoader(
+            test_ds,
+            batch_size=config["training"]["batch_size"] * 2,
+            shuffle=True,
+            num_workers=data_cfg["num_workers"],
+            pin_memory=data_cfg["pin_memory"] and device.type != "mps",
+        )
         plot_tsne(
             encoder=model.encoder,
-            loader=test_loader,
+            loader=tsne_loader,
             device=device,
             save_path=os.path.join(args.output_dir, "tsne.png"),
-            n_samples=3000,
         )
 
     if not args.no_gradcam:

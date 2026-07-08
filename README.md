@@ -445,7 +445,7 @@ Per-class ROC curves for the top prevalent classes, demonstrating the model's di
 ![ROC Curves](assets/roc_curves.png)
 
 ### 2. Encoder Embeddings (t-SNE)
-t-SNE visualization of the encoder features, colored by the primary pathology. This shows how well the model groups similar images together.
+t-SNE of the encoder features for a **class-balanced set of single-label test images** from five clinically distinct classes (No Finding, Cardiomegaly, Effusion, Pneumothorax, Emphysema). Single-label images are used because multi-label points have no single "true" colour; balancing prevents the dominant "No Finding" class from swamping the plot. Classes with genuine structure (e.g. Cardiomegaly) form visible groupings, while overlap reflects the moderate separability of the learned representation.
 ![t-SNE](assets/tsne.png)
 
 ### 3. Grad-CAM Interpretability
