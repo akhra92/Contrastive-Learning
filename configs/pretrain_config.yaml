@@ -2,21 +2,21 @@ data:
   raw_dir: "data/raw/nih-chest-xrays"
   processed_dir: "data/processed"
   image_size: 224
-  num_workers: 4
+  num_workers: 12
   pin_memory: true
 
 model:
-  backbone: "resnet50"
+  backbone: "resnet18"
   pretrained_imagenet: false
   projection_dim: 128
   projection_hidden_dim: 2048
 
 training:
-  epochs: 100
-  batch_size: 32
+  epochs: 50
+  batch_size: 256          # ResNet18 + AMP fits 256 on 8GB; more negatives = better SimCLR
   temperature: 0.1
   optimizer: "adam"
-  lr: 3.0e-4
+  lr: 1.0e-3               # scaled up for the larger batch
   weight_decay: 1.0e-4
   scheduler: "cosine"
   warmup_epochs: 10

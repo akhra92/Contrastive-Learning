@@ -2,37 +2,40 @@ data:
   raw_dir: "data/raw/nih-chest-xrays"
   processed_dir: "data/processed"
   image_size: 224
-  num_workers: 4
+  num_workers: 12
   pin_memory: true
 
 model:
-  backbone: "resnet50"
+  backbone: "resnet18"
   pretrained_checkpoint: "checkpoints/pretrain/best_encoder.pth"
   freeze_backbone: false
   classifier_hidden_dim: 512
-  dropout: 0.3
+  dropout: 0.4              # raised from 0.3 to curb overfitting
   num_classes: 15
 
 training:
   mode: "full_finetune"    # options: linear_probe | full_finetune | imagenet_baseline
-  epochs: 50
-  batch_size: 32
+  epochs: 30               # reduced; strong regularization converges sooner
+  batch_size: 64
   optimizer: "adamw"
-  lr: 1.0e-4
+  lr: 5.0e-5               # lowered from 1e-4 to smooth the val curve
   backbone_lr_multiplier: 0.1
-  weight_decay: 1.0e-2
+  weight_decay: 5.0e-2     # raised from 1e-2 for stronger regularization
   scheduler: "cosine"
-  warmup_epochs: 5
+  warmup_epochs: 3
   use_class_weights: true
-  early_stopping_patience: 10   # 0 to disable; stop after N epochs with no improvement
+  early_stopping_patience: 7    # tighter; stop after N epochs with no improvement
   early_stopping_min_delta: 1.0e-4
   seed: 42
   device: "auto"
 
 augmentation:
-  random_resized_crop_scale: [0.7, 1.0]
+  random_resized_crop_scale: [0.6, 1.0]   # slightly more aggressive cropping
   horizontal_flip_prob: 0.5
-  rotation_degrees: 10           # random rotation ±10°
+  rotation_degrees: 12           # random rotation ±12°
+  color_jitter_prob: 0.5         # brightness/contrast jitter (grayscale-safe)
+  color_jitter_strength: 0.2
+  random_erasing_prob: 0.25      # occlude a random patch each step
   normalize_mean: "auto"   # loads from data/processed/norm_stats.json; falls back to ImageNet [0.485]
   normalize_std: "auto"    # loads from data/processed/norm_stats.json; falls back to ImageNet [0.229]
 

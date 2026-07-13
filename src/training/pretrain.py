@@ -74,6 +74,8 @@ def pretrain(config: dict, resume_from: str | None = None):
         num_workers=data_cfg["num_workers"],
         pin_memory=data_cfg["pin_memory"] and device.type != "mps",
         drop_last=True,  # NT-Xent requires consistent batch size
+        persistent_workers=data_cfg["num_workers"] > 0,
+        prefetch_factor=4 if data_cfg["num_workers"] > 0 else None,
     )
 
     # ------------------------------------------------------------------ #
@@ -104,6 +106,10 @@ def pretrain(config: dict, resume_from: str | None = None):
         warmup_epochs=train_cfg["warmup_epochs"],
         total_epochs=train_cfg["epochs"],
     )
+
+    # Mixed precision (CUDA only) — enables the large batch sizes SimCLR needs.
+    use_amp = device.type == "cuda"
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # ------------------------------------------------------------------ #
     # Resume from checkpoint (if requested)                                #
@@ -147,16 +153,15 @@ def pretrain(config: dict, resume_from: str | None = None):
             view1 = view1.to(device)
             view2 = view2.to(device)
 
-            h1 = encoder(view1)
-            h2 = encoder(view2)
-            z1 = proj_head(h1)
-            z2 = proj_head(h2)
-
-            loss = criterion(z1, z2)
-
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                z1 = proj_head(encoder(view1))
+                z2 = proj_head(encoder(view2))
+                loss = criterion(z1, z2)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             meter.update(loss.item(), n=view1.size(0))
 

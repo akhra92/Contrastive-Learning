@@ -116,6 +116,8 @@ def finetune(config: dict, resume_from: str | None = None):
         shuffle=True,
         num_workers=data_cfg["num_workers"],
         pin_memory=data_cfg["pin_memory"] and device.type != "mps",
+        persistent_workers=data_cfg["num_workers"] > 0,
+        prefetch_factor=4 if data_cfg["num_workers"] > 0 else None,
     )
     val_loader = DataLoader(
         val_ds,
@@ -123,6 +125,8 @@ def finetune(config: dict, resume_from: str | None = None):
         shuffle=False,
         num_workers=data_cfg["num_workers"],
         pin_memory=data_cfg["pin_memory"] and device.type != "mps",
+        persistent_workers=data_cfg["num_workers"] > 0,
+        prefetch_factor=4 if data_cfg["num_workers"] > 0 else None,
     )
 
     # ------------------------------------------------------------------ #
@@ -144,6 +148,9 @@ def finetune(config: dict, resume_from: str | None = None):
         warmup_epochs=train_cfg["warmup_epochs"],
         total_epochs=train_cfg["epochs"],
     )
+
+    use_amp = device.type == "cuda"
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # ------------------------------------------------------------------ #
     # Resume from checkpoint (if requested)                                #
@@ -186,12 +193,14 @@ def finetune(config: dict, resume_from: str | None = None):
             images = images.to(device)
             labels = labels.to(device)
 
-            logits = model(images)
-            loss = criterion(logits, labels)
-
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                logits = model(images)
+                loss = criterion(logits, labels)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             train_meter.update(loss.item(), n=images.size(0))
 
@@ -208,8 +217,9 @@ def finetune(config: dict, resume_from: str | None = None):
             for images, labels in val_loader:
                 images = images.to(device)
                 labels = labels.to(device)
-                logits = model(images)
-                loss = criterion(logits, labels)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    logits = model(images)
+                    loss = criterion(logits, labels)
                 val_meter.update(loss.item(), n=images.size(0))
 
         scheduler.step()

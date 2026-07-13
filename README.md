@@ -62,9 +62,9 @@ The encoder is configurable via the `backbone` field in config files. All backbo
 
 | Family | Backbone | Feature dim |
 |---|---|---|
-| ResNet | `resnet18` | 512 |
+| ResNet | `resnet18` (default) | 512 |
 | ResNet | `resnet34` | 512 |
-| ResNet | `resnet50` (default) | 2048 |
+| ResNet | `resnet50` | 2048 |
 | ResNet | `resnet101` | 2048 |
 | EfficientNet | `efficientnet_b0` | 1280 |
 | EfficientNet | `efficientnet_b1` | 1280 |
@@ -222,15 +222,15 @@ bash scripts/run_pretrain.sh
 Or with custom arguments:
 
 ```bash
-python train_pretrain.py --epochs 100 --batch_size 256 --device auto
+python train_pretrain.py --epochs 50 --batch_size 256 --device auto
 ```
 
 | Argument | Default | Description |
 |---|---|---|
 | `--config` | `configs/pretrain_config.yaml` | Config file path |
-| `--epochs` | 100 | Number of training epochs |
+| `--epochs` | 50 | Number of training epochs |
 | `--batch_size` | 256 | Batch size (larger = more negatives = better) |
-| `--lr` | 3e-4 | Learning rate |
+| `--lr` | 1e-3 | Learning rate |
 | `--temperature` | 0.1 | NT-Xent temperature τ |
 | `--device` | auto | `auto` / `mps` / `cuda` / `cpu` |
 | `--seed` | 42 | Random seed for reproducibility |
@@ -272,9 +272,9 @@ bash scripts/run_finetune.sh --mode full_finetune
 |---|---|---|
 | `--mode` | `full_finetune` | Training mode (see above) |
 | `--checkpoint` | from config | Path to pre-trained encoder |
-| `--epochs` | 50 | Fine-tuning epochs |
+| `--epochs` | 30 | Fine-tuning epochs |
 | `--batch_size` | 64 | Batch size |
-| `--lr` | 1e-4 | Classifier learning rate |
+| `--lr` | 5e-5 | Classifier learning rate |
 | `--device` | auto | Device |
 | `--seed` | 42 | Random seed for reproducibility |
 | `--resume` | — | Path to checkpoint to resume training from |
@@ -347,7 +347,7 @@ When using ImageNet-pretrained weights, the RGB channel weights are averaged to 
 Set the backbone in `configs/pretrain_config.yaml`:
 ```yaml
 model:
-  backbone: "resnet50"    # or resnet18, efficientnet_b0, vit_b_16, etc.
+  backbone: "resnet18"    # or resnet34, resnet50, efficientnet_b0, vit_b_16, etc.
 ```
 
 ### Projection Head
@@ -381,7 +381,7 @@ SimCLR augmentations are tuned for grayscale medical images:
 ### Classification Head
 
 ```
-h (feature_dim) → Linear(512) → BN → ReLU → Dropout(0.3) → Linear(15) → logits
+h (feature_dim) → Linear(512) → BN → ReLU → Dropout(0.4) → Linear(15) → logits
 ```
 
 - Loss: `BCEWithLogitsLoss` with per-class `pos_weight` for class imbalance
@@ -438,7 +438,18 @@ Both formats support dynamic batch sizes and are verified against the original m
 
 ## Evaluation Results
 
-After completing SimCLR pre-training and supervised fine-tuning, the model is evaluated on the test set.
+After completing SimCLR pre-training and supervised fine-tuning, the model is evaluated on the 25,596-image test set. The default configuration uses a **ResNet18** encoder pre-trained with SimCLR at batch size 256 (mixed precision), then fully fine-tuned with strong regularization.
+
+**Test-set summary (`full_finetune`):**
+
+| Metric | Value |
+|---|---|
+| Macro AUC-ROC | 0.764 |
+| Macro Average Precision | 0.229 |
+| Macro F1 (per-class thresholds tuned on validation) | 0.282 |
+| Best per-class AUC-ROC | Hernia 0.919, Cardiomegaly 0.871, Edema 0.836 |
+
+> F1 uses per-class decision thresholds tuned on the **validation** set (not the test set); AUC-ROC and Average Precision are threshold-free. See `logs/metrics_full_finetune.txt` for the full per-class table.
 
 ### 1. ROC Curves
 Per-class ROC curves for the top prevalent classes, demonstrating the model's discriminative ability across different pathologies.
@@ -453,5 +464,5 @@ Grad-CAM heatmaps overlaying the original X-rays to highlight the regions the mo
 ![Grad-CAM](assets/gradcam_cardiomegaly.png)
 
 ### 4. Training Loss
-Loss curves during the pre-training and fine-tuning phases.
+Loss curves for both phases. **Left:** SimCLR NT-Xent loss decreases smoothly over 50 epochs (batch 256). **Right:** fine-tuning train/validation BCE loss — the two curves descend together and the validation loss settles into a flat plateau, indicating the strong regularization (dropout 0.4, weight decay 5e-2, colour jitter + random erasing) keeps overfitting in check. Early stopping halts training when validation loss stops improving.
 ![Loss Curves](assets/loss_curves.png)

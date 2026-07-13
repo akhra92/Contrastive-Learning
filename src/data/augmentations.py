@@ -108,7 +108,11 @@ class FinetuneAugmentation:
         mean, std = _resolve_norm_stats(config)
 
         if train:
-            self.transform = T.Compose([
+            cj_prob = aug_cfg.get("color_jitter_prob", 0.0)
+            cj_s = aug_cfg.get("color_jitter_strength", 0.0)
+            erase_prob = aug_cfg.get("random_erasing_prob", 0.0)
+
+            transforms = [
                 T.RandomResizedCrop(
                     size=image_size,
                     scale=tuple(aug_cfg["random_resized_crop_scale"]),
@@ -116,9 +120,20 @@ class FinetuneAugmentation:
                 ),
                 T.RandomHorizontalFlip(p=aug_cfg["horizontal_flip_prob"]),
                 T.RandomRotation(degrees=aug_cfg.get("rotation_degrees", 10)),
-                T.ToTensor(),
-                T.Normalize(mean=mean, std=std),
-            ])
+            ]
+            # Brightness/contrast jitter (no saturation/hue for grayscale)
+            if cj_prob > 0 and cj_s > 0:
+                transforms.append(
+                    T.RandomApply(
+                        [T.ColorJitter(brightness=cj_s, contrast=cj_s, saturation=0, hue=0)],
+                        p=cj_prob,
+                    )
+                )
+            transforms += [T.ToTensor(), T.Normalize(mean=mean, std=std)]
+            # Random erasing operates on tensors, so it goes after ToTensor/Normalize
+            if erase_prob > 0:
+                transforms.append(T.RandomErasing(p=erase_prob))
+            self.transform = T.Compose(transforms)
         else:
             self.transform = T.Compose([
                 T.Resize(256, interpolation=InterpolationMode.BICUBIC),
