@@ -443,10 +443,10 @@ After completing SimCLR pre-training and supervised fine-tuning, the model is ev
 
 | Metric | Value |
 |---|---|
-| Macro AUC-ROC | 0.764 |
-| Macro Average Precision | 0.229 |
-| Macro F1 (per-class thresholds tuned on validation) | 0.282 |
-| Best per-class AUC-ROC | Hernia 0.919, Cardiomegaly 0.871, Edema 0.836 |
+| Macro AUC-ROC | N/A |
+| Macro Average Precision | N/A |
+| Macro F1 (per-class thresholds tuned on validation) | N/A |
+| Best per-class AUC-ROC | N/A |
 
 > F1 uses per-class decision thresholds tuned on the **validation** set (not the test set); AUC-ROC and Average Precision are threshold-free. See `logs/metrics_full_finetune.txt` for the full per-class table.
 
@@ -454,14 +454,10 @@ After completing SimCLR pre-training and supervised fine-tuning, the model is ev
 Per-class ROC curves for the top prevalent classes, demonstrating the model's discriminative ability across different pathologies.
 ![ROC Curves](assets/roc_curves.png)
 
-### 2. Encoder Embeddings (t-SNE)
-t-SNE of the encoder features for a **class-balanced set of single-label test images** from five clinically distinct classes (No Finding, Cardiomegaly, Effusion, Pneumothorax, Emphysema). Single-label images are used because multi-label points have no single "true" colour; balancing prevents the dominant "No Finding" class from swamping the plot. Classes with genuine structure (e.g. Cardiomegaly) form visible groupings, while overlap reflects the moderate separability of the learned representation.
-![t-SNE](assets/tsne.png)
-
-### 3. Grad-CAM Interpretability
+### 2. Grad-CAM Interpretability
 Grad-CAM heatmaps overlaying the original X-rays to highlight the regions the model focuses on when predicting specific pathologies (e.g., Cardiomegaly).
 ![Grad-CAM](assets/gradcam_cardiomegaly.png)
 
-### 4. Training Loss
+### 3. Training Loss
 Loss curves for both phases. **Left:** SimCLR NT-Xent loss decreases smoothly over 50 epochs (batch 256). **Right:** fine-tuning train/validation BCE loss — the two curves descend together and the validation loss settles into a flat plateau, indicating the strong regularization (dropout 0.4, weight decay 5e-2, colour jitter + random erasing) keeps overfitting in check. Early stopping halts training when validation loss stops improving.
 ![Loss Curves](assets/loss_curves.png)
