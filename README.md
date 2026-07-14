@@ -88,8 +88,7 @@ Contrastive_Learning/
 │
 ├── configs/
 │   ├── pretrain_config.yaml      # SimCLR hyperparameters
-│   ├── finetune_config.yaml      # Fine-tuning hyperparameters
-│   └── data_config.yaml          # Dataset paths and class names
+│   └── finetune_config.yaml      # Fine-tuning hyperparameters
 │
 ├── scripts/
 │   ├── download_data.sh          # Kaggle API download + preprocessing
@@ -312,7 +311,7 @@ bash scripts/run_eval.sh --checkpoint checkpoints/finetune/best_model_full_finet
 - `metrics_<mode>.txt` — per-class and macro-averaged AUC-ROC, AP, F1
 - `roc_curves.png` — per-class ROC curves
 - `tsne.png` — t-SNE of encoder embeddings coloured by pathology
-- `gradcam_pneumonia.png` — GradCAM saliency maps
+- `gradcam_cardiomegaly.png` — GradCAM saliency maps
 - `loss_curves.png` — pre-training and fine-tuning loss curves
 
 ---
