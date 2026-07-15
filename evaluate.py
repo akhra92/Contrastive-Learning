@@ -2,7 +2,7 @@
 Full evaluation suite on the NIH Chest X-ray14 test set.
 
 Computes per-class and macro-averaged AUC-ROC, Average Precision, and F1.
-Generates: ROC curves, t-SNE embeddings, GradCAM saliency maps, loss curves.
+Generates: ROC curves, GradCAM saliency maps, loss curves.
 Optionally exports the model to ONNX and/or TorchScript.
 
 Usage:
@@ -27,7 +27,7 @@ from src.evaluation.metrics import (
     print_metrics,
     tune_thresholds,
 )
-from src.evaluation.visualize import plot_gradcam, plot_loss_curves, plot_roc_curves, plot_tsne
+from src.evaluation.visualize import plot_gradcam, plot_loss_curves, plot_roc_curves
 from src.models.classifier import ChestXrayClassifier
 from src.models.encoder import SimCLREncoder
 from src.training.utils import find_image_dir, get_device
@@ -43,7 +43,6 @@ def parse_args():
         default=None,
     )
     p.add_argument("--device", choices=["auto", "mps", "cuda", "cpu"], default=None)
-    p.add_argument("--no_tsne", action="store_true", help="Skip t-SNE (slow for large datasets)")
     p.add_argument("--no_gradcam", action="store_true", help="Skip GradCAM generation")
     p.add_argument("--output_dir", default="logs", help="Directory for saved figures")
     p.add_argument(
@@ -203,23 +202,6 @@ def main():
     # ------------------------------------------------------------------ #
     plot_roc_curves(y_true, y_pred_logits, save_path=os.path.join(args.output_dir, "roc_curves.png"))
     plot_loss_curves(log_dir=args.output_dir, save_path=os.path.join(args.output_dir, "loss_curves.png"))
-
-    if not args.no_tsne:
-        # Shuffled loader so the class-balanced t-SNE sample is drawn from across
-        # the whole test set, not just the first images.
-        tsne_loader = DataLoader(
-            test_ds,
-            batch_size=config["training"]["batch_size"] * 2,
-            shuffle=True,
-            num_workers=data_cfg["num_workers"],
-            pin_memory=data_cfg["pin_memory"] and device.type != "mps",
-        )
-        plot_tsne(
-            encoder=model.encoder,
-            loader=tsne_loader,
-            device=device,
-            save_path=os.path.join(args.output_dir, "tsne.png"),
-        )
 
     if not args.no_gradcam:
         # GradCAM only makes sense on images that actually contain the target

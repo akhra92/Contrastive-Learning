@@ -26,7 +26,7 @@ Raw X-ray images
       │
       ▼
 [Evaluation]
-  Per-class AUC-ROC, ROC curves, t-SNE, GradCAM
+  Per-class AUC-ROC, ROC curves, GradCAM
 ```
 
 ### Three comparison modes
@@ -118,7 +118,7 @@ Contrastive_Learning/
 │   │
 │   └── evaluation/
 │       ├── metrics.py           # AUC-ROC, Average Precision, F1
-│       └── visualize.py         # t-SNE, ROC curves, GradCAM, loss curves
+│       └── visualize.py         # ROC curves, GradCAM, loss curves
 │
 ├── train_pretrain.py             # Entry point: SimCLR pre-training
 ├── train_finetune.py             # Entry point: fine-tuning / linear probe
@@ -128,7 +128,7 @@ Contrastive_Learning/
 ├── notebooks/
 │   ├── 01_data_exploration.ipynb    # Class distribution, sample images
 │   ├── 02_augmentation_preview.ipynb # Visualise augmentation pairs
-│   └── 03_results_analysis.ipynb    # ROC curves, t-SNE, metrics table
+│   └── 03_results_analysis.ipynb    # ROC curves, metrics table, GradCAM
 │
 ├── data/
 │   ├── raw/                      # Downloaded dataset (gitignored)
@@ -301,7 +301,6 @@ bash scripts/run_eval.sh --checkpoint checkpoints/finetune/best_model_full_finet
 
 | Flag | Description |
 |---|---|
-| `--no_tsne` | Skip t-SNE (slow for large datasets) |
 | `--no_gradcam` | Skip GradCAM generation |
 | `--output_dir` | Directory for output figures (default: `logs/`) |
 | `--export onnx torchscript` | Export model after evaluation (one or both formats) |
@@ -310,7 +309,6 @@ bash scripts/run_eval.sh --checkpoint checkpoints/finetune/best_model_full_finet
 **Outputs saved to `logs/`:**
 - `metrics_<mode>.txt` — per-class and macro-averaged AUC-ROC, AP, F1
 - `roc_curves.png` — per-class ROC curves
-- `tsne.png` — t-SNE of encoder embeddings coloured by pathology
 - `gradcam_cardiomegaly.png` — GradCAM saliency maps
 - `loss_curves.png` — pre-training and fine-tuning loss curves
 
@@ -328,7 +326,7 @@ jupyter lab notebooks/
 |---|---|
 | `01_data_exploration.ipynb` | Class distribution, sample X-rays, split verification, pixel statistics |
 | `02_augmentation_preview.ipynb` | Side-by-side view of original vs. SimCLR augmented pairs |
-| `03_results_analysis.ipynb` | Compare all modes in a metrics table, ROC curves, t-SNE, GradCAM |
+| `03_results_analysis.ipynb` | Compare all modes in a metrics table, ROC curves, GradCAM |
 
 ---
 
