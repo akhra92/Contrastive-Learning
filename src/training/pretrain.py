@@ -109,7 +109,7 @@ def pretrain(config: dict, resume_from: str | None = None):
 
     # Mixed precision (CUDA only) — enables the large batch sizes SimCLR needs.
     use_amp = device.type == "cuda"
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     # ------------------------------------------------------------------ #
     # Resume from checkpoint (if requested)                                #
@@ -154,7 +154,7 @@ def pretrain(config: dict, resume_from: str | None = None):
             view2 = view2.to(device)
 
             optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.amp.autocast("cuda", enabled=use_amp):
                 z1 = proj_head(encoder(view1))
                 z2 = proj_head(encoder(view2))
                 loss = criterion(z1, z2)

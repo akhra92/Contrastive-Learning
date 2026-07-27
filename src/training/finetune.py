@@ -150,7 +150,7 @@ def finetune(config: dict, resume_from: str | None = None):
     )
 
     use_amp = device.type == "cuda"
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
     # ------------------------------------------------------------------ #
     # Resume from checkpoint (if requested)                                #
@@ -194,7 +194,7 @@ def finetune(config: dict, resume_from: str | None = None):
             labels = labels.to(device)
 
             optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.amp.autocast("cuda", enabled=use_amp):
                 logits = model(images)
                 loss = criterion(logits, labels)
 
@@ -217,7 +217,7 @@ def finetune(config: dict, resume_from: str | None = None):
             for images, labels in val_loader:
                 images = images.to(device)
                 labels = labels.to(device)
-                with torch.cuda.amp.autocast(enabled=use_amp):
+                with torch.amp.autocast("cuda", enabled=use_amp):
                     logits = model(images)
                     loss = criterion(logits, labels)
                 val_meter.update(loss.item(), n=images.size(0))
