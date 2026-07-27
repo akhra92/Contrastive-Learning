@@ -2,8 +2,9 @@
 Compute per-channel mean and std of the NIH Chest X-ray14 dataset.
 
 Uses Welford's online algorithm to avoid loading all images into memory.
-Computes stats on the training split only (to avoid leaking test info into
-normalisation), resized to the target image_size.
+Computes stats on the train/val images only — the official test split
+(test_list.txt) is excluded so no test information leaks into normalisation.
+Images are resized to the target image_size first.
 
 Saves results to data/processed/norm_stats.json so training scripts can
 load them automatically instead of using borrowed ImageNet values.
@@ -27,21 +28,28 @@ def compute_norm_stats(
     image_dir: str,
     image_size: int = 224,
     max_samples: int = 0,
+    exclude_files: set | None = None,
 ) -> dict:
     """
-    Compute mean and std over all .png images in image_dir.
+    Compute mean and std over .png images in image_dir.
 
     Uses Welford's online algorithm for numerical stability.
 
     Args:
-        image_dir    : directory containing .png images.
-        image_size   : resize images to this size before computing stats.
-        max_samples  : if > 0, subsample this many images (faster for large datasets).
+        image_dir     : directory containing .png images.
+        image_size    : resize images to this size before computing stats.
+        max_samples   : if > 0, subsample this many images (faster for large datasets).
+        exclude_files : filenames (basenames) to skip, e.g. the official test
+                        split, so no test information leaks into normalisation.
 
     Returns:
         dict with keys 'mean' and 'std' (each a list with one float for grayscale).
     """
     paths = sorted(glob.glob(os.path.join(image_dir, "**", "*.png"), recursive=True))
+    if exclude_files:
+        n_before = len(paths)
+        paths = [p for p in paths if os.path.basename(p) not in exclude_files]
+        print(f"Excluded {n_before - len(paths)} images (official test split)")
     if not paths:
         raise FileNotFoundError(f"No .png images found under {image_dir}")
 
@@ -109,10 +117,20 @@ def main():
     from src.training.utils import find_image_dir
     image_dir = find_image_dir(args.raw_dir)
 
+    # Exclude the official test split so its pixels don't leak into the stats
+    exclude_files = None
+    test_list = os.path.join(args.raw_dir, "test_list.txt")
+    if os.path.isfile(test_list):
+        with open(test_list) as f:
+            exclude_files = {line.strip() for line in f if line.strip()}
+    else:
+        print(f"Warning: {test_list} not found — stats will include test images.")
+
     stats = compute_norm_stats(
         image_dir=image_dir,
         image_size=args.image_size,
         max_samples=args.max_samples,
+        exclude_files=exclude_files,
     )
 
     os.makedirs(args.out_dir, exist_ok=True)

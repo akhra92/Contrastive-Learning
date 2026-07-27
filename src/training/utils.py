@@ -137,7 +137,10 @@ def cosine_schedule_with_warmup(optimizer, warmup_epochs: int, total_epochs: int
     """
     def lr_lambda(epoch: int) -> float:
         if epoch < warmup_epochs:
-            return max(epoch / warmup_epochs, 1e-6)
+            # epoch is 0-based: first epoch runs at 1/warmup_epochs, reaching
+            # the full LR on the last warmup epoch (not one epoch late, and
+            # never at the near-zero factor a bare epoch/warmup_epochs gives).
+            return (epoch + 1) / warmup_epochs
         progress = (epoch - warmup_epochs) / max(total_epochs - warmup_epochs, 1)
         return 0.5 * (1.0 + math.cos(math.pi * progress))
 

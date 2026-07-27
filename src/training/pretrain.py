@@ -35,12 +35,31 @@ from src.training.utils import (
 
 
 def _collect_image_paths(raw_dir: str) -> list:
-    """Recursively collect all .png image paths for pre-training."""
+    """
+    Recursively collect .png image paths for pre-training.
+
+    Images in the official NIH test split (test_list.txt) are excluded: even
+    though pre-training uses no labels, training on the exact test images is
+    transductive and would make results incomparable to published benchmarks.
+    """
     paths = glob.glob(os.path.join(raw_dir, "**", "*.png"), recursive=True)
     if not paths:
         raise FileNotFoundError(
             f"No .png images found under {raw_dir}. "
             "Run scripts/download_data.sh first."
+        )
+
+    test_list = os.path.join(raw_dir, "test_list.txt")
+    if os.path.isfile(test_list):
+        with open(test_list) as f:
+            test_files = {line.strip() for line in f if line.strip()}
+        n_before = len(paths)
+        paths = [p for p in paths if os.path.basename(p) not in test_files]
+        print(f"Excluded {n_before - len(paths)} official test-split images from pre-training")
+    else:
+        print(
+            f"Warning: {test_list} not found — cannot exclude the official test "
+            "split, so pre-training will include ALL images under raw_dir."
         )
     return paths
 

@@ -6,7 +6,7 @@ Self-supervised pre-training with **SimCLR** on the **NIH Chest X-ray14** datase
 
 ## Overview
 
-This project demonstrates how contrastive self-supervised learning (SSL) can learn rich medical image representations **without labels**, which are then fine-tuned for downstream classification. The key advantage: SimCLR pre-training uses all 112k images (labels not needed), while supervised methods are limited to labelled training data.
+This project demonstrates how contrastive self-supervised learning (SSL) can learn rich medical image representations **without labels**, which are then fine-tuned for downstream classification. The key advantage: SimCLR pre-training uses all ~86k train/val images without needing their labels (the official test split is excluded to avoid transductive leakage), while supervised methods are limited to labelled training data.
 
 ### Pipeline
 

@@ -52,8 +52,10 @@ class SimCLRDataset(Dataset):
     Unlabelled dataset for self-supervised pre-training.
 
     Accepts a list of absolute image paths and a SimCLRAugmentation callable.
-    Labels are intentionally omitted so ALL available images (including the test
-    split) can participate in pre-training without data leakage.
+    Labels are intentionally omitted. The caller is responsible for excluding
+    the official test split from `image_paths` (see
+    src.training.pretrain._collect_image_paths): even without labels, training
+    on the test images themselves is transductive leakage.
     """
 
     def __init__(self, image_paths: list, augmentation):
