@@ -31,7 +31,9 @@ training:
 
 augmentation:
   random_resized_crop_scale: [0.6, 1.0]   # slightly more aggressive cropping
-  horizontal_flip_prob: 0.5
+  horizontal_flip_prob: 0.0    # disabled: cardiac anatomy is lateralized (heart on the left);
+                               # flipping forces the model to ignore laterality, which hurts
+                               # findings like Cardiomegaly. Set > 0 only for an ablation.
   rotation_degrees: 12           # random rotation ±12°
   color_jitter_prob: 0.5         # brightness/contrast jitter (grayscale-safe)
   color_jitter_strength: 0.2

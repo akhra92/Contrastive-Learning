@@ -368,7 +368,7 @@ where `sim` is cosine similarity and `τ = 0.1`. Each view's positive pair is th
 
 SimCLR augmentations are tuned for grayscale medical images:
 - Random resized crop (scale 0.08–1.0)
-- Random horizontal flip
+- No horizontal flip — chest anatomy is lateralized (heart on the left), and flip-invariance erases laterality cues needed for findings like Cardiomegaly (`horizontal_flip_prob: 0.0`, configurable for ablations)
 - Random rotation (±10°, configurable via `rotation_degrees`)
 - Color jitter (brightness + contrast only — no saturation/hue for grayscale)
 - Random Gaussian blur
