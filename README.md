@@ -2,34 +2,24 @@
 
 Self-supervised pre-training with **SimCLR** on the **NIH Chest X-ray14** dataset, followed by supervised fine-tuning for multi-label pathology classification.
 
----
-
 ## Overview
 
-This project demonstrates how contrastive self-supervised learning (SSL) can learn rich medical image representations **without labels**, which are then fine-tuned for downstream classification. The key advantage: SimCLR pre-training uses all ~86k train/val images without needing their labels (the official test split is excluded to avoid transductive leakage), while supervised methods are limited to labelled training data.
-
-### Pipeline
+SimCLR learns image representations without labels by pulling two augmented views of the same X-ray together in embedding space (NT-Xent loss) while pushing apart views of different X-rays. The pre-trained encoder is then fine-tuned for 15-way multi-label classification.
 
 ```
 Raw X-ray images
       │
       ▼
-[SimCLR Pre-training]          ← self-supervised, no labels used
-  Configurable encoder
-  + Projection head (MLP)
-  + NT-Xent contrastive loss
-      │
-      ▼  (projection head discarded)
-[Fine-tuning]                  ← supervised, multi-label BCE loss
-  Pre-trained encoder
-  + Classification head (MLP)
+[SimCLR Pre-training]     self-supervised: encoder + projection head + NT-Xent loss
+      │                   (projection head discarded afterwards)
+      ▼
+[Fine-tuning]             supervised: encoder + MLP head, multi-label BCE loss
       │
       ▼
-[Evaluation]
-  Per-class AUC-ROC, ROC curves, GradCAM
+[Evaluation]              per-class AUC-ROC, ROC curves, GradCAM
 ```
 
-### Three comparison modes
+Three modes let you compare SimCLR against baselines:
 
 | Mode | Encoder init | Backbone frozen? |
 |---|---|---|
@@ -37,425 +27,132 @@ Raw X-ray images
 | `linear_probe` | SimCLR pre-trained | Yes (classifier only) |
 | `imagenet_baseline` | ImageNet weights | No |
 
----
-
 ## Dataset
 
-**NIH Chest X-ray14** — 112,120 frontal-view chest X-rays from 30,805 patients.
+**NIH Chest X-ray14** — 112,120 frontal-view chest X-rays from 30,805 patients, 15 labels (multi-label: No Finding, Atelectasis, Cardiomegaly, Effusion, Infiltration, Mass, Nodule, Pneumonia, Pneumothorax, Consolidation, Edema, Emphysema, Fibrosis, Pleural Thickening, Hernia).
 Source: [kaggle.com/datasets/nih-chest-xrays/data](https://www.kaggle.com/datasets/nih-chest-xrays/data)
 
-**15 labels** (multi-label — one image can have multiple findings):
-
-| Label | Label | Label |
-|---|---|---|
-| No Finding | Atelectasis | Cardiomegaly |
-| Effusion | Infiltration | Mass |
-| Nodule | Pneumonia | Pneumothorax |
-| Consolidation | Edema | Emphysema |
-| Fibrosis | Pleural Thickening | Hernia |
-
----
-
-## Supported Backbones
-
-The encoder is configurable via the `backbone` field in config files. All backbones are automatically adapted for single-channel grayscale input.
-
-| Family | Backbone | Feature dim |
-|---|---|---|
-| ResNet | `resnet18` (default) | 512 |
-| ResNet | `resnet34` | 512 |
-| ResNet | `resnet50` | 2048 |
-| ResNet | `resnet101` | 2048 |
-| EfficientNet | `efficientnet_b0` | 1280 |
-| EfficientNet | `efficientnet_b1` | 1280 |
-| EfficientNet | `efficientnet_b2` | 1408 |
-| ViT | `vit_b_16` | 768 |
-| ViT | `vit_b_32` | 768 |
-| ViT | `vit_l_16` | 1024 |
-
-The projection head and classification head automatically adapt to the backbone's feature dimension.
-
----
+Splits are **patient-level** (all images of a patient stay in one split) using the official NIH test list. Pre-training uses only the ~86k train/val images — the test split is excluded even though no labels are used, to avoid transductive leakage.
 
 ## Project Structure
 
 ```
-Contrastive_Learning/
-│
-├── README.md
-├── requirements.txt
-├── .gitignore
-│
-├── configs/
-│   ├── pretrain_config.yaml      # SimCLR hyperparameters
-│   └── finetune_config.yaml      # Fine-tuning hyperparameters
-│
-├── scripts/
-│   ├── download_data.sh          # Kaggle API download + preprocessing
-│   ├── run_pretrain.sh           # Launch pre-training
-│   ├── run_finetune.sh           # Launch fine-tuning
-│   └── run_eval.sh               # Launch evaluation
-│
-├── src/
-│   ├── data/
-│   │   ├── augmentations.py      # SimCLR + finetune augmentation pipelines
-│   │   ├── dataset.py            # SimCLRDataset, ChestXrayDataset
-│   │   ├── preprocess.py         # Build patient-level train/val/test splits
-│   │   └── compute_norm_stats.py # Compute dataset-specific mean/std
-│   │
-│   ├── models/
-│   │   ├── encoder.py            # Multi-backbone encoder with registry
-│   │   ├── projection_head.py    # 2-layer MLP projection head (SimCLR)
-│   │   └── classifier.py         # Multi-label classification head
-│   │
-│   ├── losses/
-│   │   └── nt_xent.py           # NT-Xent contrastive loss
-│   │
-│   ├── training/
-│   │   ├── pretrain.py          # SimCLR pre-training loop
-│   │   ├── finetune.py          # Supervised fine-tuning loop
-│   │   └── utils.py             # Device selection, checkpointing, LR schedules, seeding
-│   │
-│   └── evaluation/
-│       ├── metrics.py           # AUC-ROC, Average Precision, F1
-│       └── visualize.py         # ROC curves, GradCAM, loss curves
-│
-├── train_pretrain.py             # Entry point: SimCLR pre-training
-├── train_finetune.py             # Entry point: fine-tuning / linear probe
-├── evaluate.py                   # Entry point: test set evaluation + plots
-├── export_model.py               # Entry point: ONNX / TorchScript export
-│
-├── notebooks/
-│   ├── 01_data_exploration.ipynb    # Class distribution, sample images
-│   ├── 02_augmentation_preview.ipynb # Visualise augmentation pairs
-│   └── 03_results_analysis.ipynb    # ROC curves, metrics table, GradCAM
-│
-├── data/
-│   ├── raw/                      # Downloaded dataset (gitignored)
-│   └── processed/                # Generated CSV splits + norm_stats.json (gitignored)
-│
-├── checkpoints/
-│   ├── pretrain/                 # Saved encoder + resume checkpoints
-│   └── finetune/                 # Saved classifier + resume checkpoints
-│
-├── exports/                      # Exported ONNX / TorchScript models
-│
-└── logs/                         # Training logs and output figures
+configs/            pretrain_config.yaml, finetune_config.yaml
+scripts/            download_data.sh, run_pretrain.sh, run_finetune.sh, run_eval.sh
+src/
+  data/             augmentations, datasets, split building, norm stats
+  models/           encoder (multi-backbone), projection head, classifier
+  losses/           NT-Xent contrastive loss
+  training/         pre-training loop, fine-tuning loop, shared utils
+  evaluation/       metrics (AUC/AP/F1), ROC + GradCAM + loss-curve plots
+notebooks/          01_data_exploration, 02_augmentation_preview, 03_results_analysis
+train_pretrain.py   entry point: SimCLR pre-training
+train_finetune.py   entry point: fine-tuning / linear probe / ImageNet baseline
+evaluate.py         entry point: test-set evaluation + plots (+ optional export)
+export_model.py     entry point: ONNX / TorchScript export
 ```
 
----
+Generated artifacts go to `data/` (raw + processed, gitignored), `checkpoints/`, `logs/`, and `exports/`.
 
 ## Setup
 
-### 1. Clone / navigate to the project
-
-```bash
-cd /path/to/Contrastive_Learning
-```
-
-### 2. Create a virtual environment (recommended)
-
 ```bash
 python3 -m venv venv
-source venv/bin/activate        # macOS / Linux
-# venv\Scripts\activate         # Windows
-```
-
-### 3. Install dependencies
-
-```bash
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-> **Apple Silicon (M1/M2/M3):** PyTorch MPS backend is automatically detected and used. No extra steps needed.
-> **CUDA GPU:** Install the appropriate `torch` version from [pytorch.org](https://pytorch.org/get-started/locally/).
+Apple Silicon (MPS) is auto-detected; for CUDA install the matching `torch` build from [pytorch.org](https://pytorch.org/get-started/locally/).
 
-### 4. Set up Kaggle API credentials
+**Kaggle credentials** (needed for the download script): create an API token at [kaggle.com/settings](https://www.kaggle.com/settings), place `kaggle.json` in `~/.kaggle/` (`chmod 600`), and accept the dataset terms on its Kaggle page.
 
-1. Go to [kaggle.com/settings](https://www.kaggle.com/settings) → **API** → **Create New Token**
-2. Move the downloaded `kaggle.json` to `~/.kaggle/`:
-   ```bash
-   mkdir -p ~/.kaggle
-   mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
-   chmod 600 ~/.kaggle/kaggle.json
-   ```
-3. Accept the dataset terms at [kaggle.com/datasets/nih-chest-xrays/data](https://www.kaggle.com/datasets/nih-chest-xrays/data) (required before downloading)
+## Usage
 
----
+All entry points accept `--help` for the full list of flags; common overrides are `--epochs`, `--batch_size`, `--lr`, `--device`, `--seed`, `--resume`, and `--wandb`. Defaults live in `configs/*.yaml`.
 
-## Running the Project
-
-### Step 1 — Download data and build splits
+**1. Download data (~45 GB) and build splits**
 
 ```bash
 bash scripts/download_data.sh
 ```
 
-This will:
-- Download the full NIH Chest X-ray14 dataset (~45 GB) to `data/raw/`
-- Run `src/data/preprocess.py` to create patient-level `train.csv`, `val.csv`, `test.csv` in `data/processed/`
-
-> **Patient-level splitting:** All images from the same patient are kept in the same split to prevent data leakage. The official NIH test list is used as the test split.
-
-### Step 2 — Compute dataset normalization stats (recommended)
+**2. Compute dataset normalization stats** (recommended; otherwise training falls back to ImageNet values with a warning)
 
 ```bash
-python -m src.data.compute_norm_stats
+python -m src.data.compute_norm_stats            # add --max_samples 5000 for a fast estimate
 ```
 
-This computes the true mean and standard deviation of the chest X-ray dataset and saves them to `data/processed/norm_stats.json`. Training scripts load these automatically when `normalize_mean` / `normalize_std` are set to `"auto"` in the config (the default).
+**3. SimCLR pre-training** — best encoder saved to `checkpoints/pretrain/best_encoder.pth`
 
-For a faster estimate using a subset:
 ```bash
-python -m src.data.compute_norm_stats --max_samples 5000
+python train_pretrain.py
+python train_pretrain.py --resume checkpoints/pretrain/latest_pretrain.pth   # resume after a crash
 ```
 
-> If you skip this step, training falls back to ImageNet normalization values (`mean=0.485, std=0.229`) with a warning.
-
-### Step 3 — SimCLR pre-training
+**4. Fine-tune** — best model saved to `checkpoints/finetune/best_model_<mode>.pth`
 
 ```bash
-bash scripts/run_pretrain.sh
-```
-
-Or with custom arguments:
-
-```bash
-python train_pretrain.py --epochs 50 --batch_size 256 --device auto
-```
-
-| Argument | Default | Description |
-|---|---|---|
-| `--config` | `configs/pretrain_config.yaml` | Config file path |
-| `--epochs` | 50 | Number of training epochs |
-| `--batch_size` | 256 | Batch size (larger = more negatives = better) |
-| `--lr` | 1e-3 | Learning rate |
-| `--temperature` | 0.1 | NT-Xent temperature τ |
-| `--device` | auto | `auto` / `mps` / `cuda` / `cpu` |
-| `--seed` | 42 | Random seed for reproducibility |
-| `--resume` | — | Path to checkpoint to resume training from |
-| `--wandb` | off | Enable Weights & Biases logging |
-
-Checkpoints are saved to `checkpoints/pretrain/`. The best encoder is saved as `best_encoder.pth`.
-
-> **Note:** Pre-training uses ALL images (labels ignored), so even test-split images participate — this is valid because no labels are used.
-
-**Resuming after a crash:**
-```bash
-python train_pretrain.py --resume checkpoints/pretrain/latest_pretrain.pth
-```
-
-### Step 4 — Fine-tune for classification
-
-**Full fine-tuning (recommended):**
-```bash
-python train_finetune.py --mode full_finetune
-```
-
-**Linear probe (backbone frozen):**
-```bash
-python train_finetune.py --mode linear_probe
-```
-
-**ImageNet baseline (for comparison):**
-```bash
-python train_finetune.py --mode imagenet_baseline
-```
-
-Or via the shell script:
-```bash
-bash scripts/run_finetune.sh --mode full_finetune
-```
-
-| Argument | Default | Description |
-|---|---|---|
-| `--mode` | `full_finetune` | Training mode (see above) |
-| `--checkpoint` | from config | Path to pre-trained encoder |
-| `--epochs` | 30 | Fine-tuning epochs |
-| `--batch_size` | 64 | Batch size |
-| `--lr` | 5e-5 | Classifier learning rate |
-| `--device` | auto | Device |
-| `--seed` | 42 | Random seed for reproducibility |
-| `--resume` | — | Path to checkpoint to resume training from |
-| `--wandb` | off | Enable Weights & Biases logging |
-
-Best models saved to `checkpoints/finetune/best_model_<mode>.pth`.
-
-**Resuming after a crash:**
-```bash
+python train_finetune.py --mode full_finetune      # or linear_probe | imagenet_baseline
 python train_finetune.py --resume checkpoints/finetune/latest_finetune_full_finetune.pth
 ```
 
-### Step 5 — Evaluate on the test set
+**5. Evaluate on the test set**
 
 ```bash
 python evaluate.py --checkpoint checkpoints/finetune/best_model_full_finetune.pth
 ```
 
-Or via the shell script:
-```bash
-bash scripts/run_eval.sh --checkpoint checkpoints/finetune/best_model_full_finetune.pth
-```
+Outputs to `logs/`: `metrics_<mode>.txt` (per-class + macro AUC-ROC / AP / F1), `roc_curves.png`, `gradcam_cardiomegaly.png`, `loss_curves.png`. Add `--no_gradcam` to skip saliency maps, or `--export onnx torchscript` to export the model afterwards.
 
-**Optional flags:**
+**Model export** (standalone) — writes `exports/<name>.onnx` and/or `exports/<name>.pt`, both with dynamic batch size and verified against the original model:
 
-| Flag | Description |
-|---|---|
-| `--no_gradcam` | Skip GradCAM generation |
-| `--output_dir` | Directory for output figures (default: `logs/`) |
-| `--export onnx torchscript` | Export model after evaluation (one or both formats) |
-| `--export_dir` | Directory for exported models (default: `exports/`) |
-
-**Outputs saved to `logs/`:**
-- `metrics_<mode>.txt` — per-class and macro-averaged AUC-ROC, AP, F1
-- `roc_curves.png` — per-class ROC curves
-- `gradcam_cardiomegaly.png` — GradCAM saliency maps
-- `loss_curves.png` — pre-training and fine-tuning loss curves
-
----
-
-## Notebooks
-
-Open Jupyter Lab and run in order:
-
-```bash
-jupyter lab notebooks/
-```
-
-| Notebook | Description |
-|---|---|
-| `01_data_exploration.ipynb` | Class distribution, sample X-rays, split verification, pixel statistics |
-| `02_augmentation_preview.ipynb` | Side-by-side view of original vs. SimCLR augmented pairs |
-| `03_results_analysis.ipynb` | Compare all modes in a metrics table, ROC curves, GradCAM |
-
----
-
-## Architecture Details
-
-### Encoder (Configurable backbone)
-
-All backbones are adapted for single-channel grayscale input:
-- **ResNet family:** First conv `in_channels=3` → `1`; avgpool + FC stripped
-- **EfficientNet family:** First conv `in_channels=3` → `1`; classifier stripped
-- **ViT family:** Patch embedding conv `in_channels=3` → `1`; classification head stripped
-
-When using ImageNet-pretrained weights, the RGB channel weights are averaged to initialise the single-channel convolution.
-
-Set the backbone in `configs/pretrain_config.yaml`:
-```yaml
-model:
-  backbone: "resnet18"    # or resnet34, resnet50, efficientnet_b0, vit_b_16, etc.
-```
-
-### Projection Head
-
-2-layer MLP used only during pre-training, then discarded:
-```
-h (feature_dim) → Linear → BN → ReLU → Linear → L2-normalise → z (128)
-```
-
-### NT-Xent Loss
-
-For a batch of N images (→ 2N augmented views):
-
-```
-L = -log [ exp(sim(zᵢ, zⱼ) / τ) / Σ_{k≠i} exp(sim(zᵢ, zₖ) / τ) ]
-```
-
-where `sim` is cosine similarity and `τ = 0.1`. Each view's positive pair is the other augmented view of the same image; all other 2(N-1) views are negatives.
-
-### Augmentation Pipeline (X-ray adapted)
-
-SimCLR augmentations are tuned for grayscale medical images:
-- Random resized crop (scale 0.08–1.0)
-- No horizontal flip — chest anatomy is lateralized (heart on the left), and flip-invariance erases laterality cues needed for findings like Cardiomegaly (`horizontal_flip_prob: 0.0`, configurable for ablations)
-- Random rotation (±10°, configurable via `rotation_degrees`)
-- Color jitter (brightness + contrast only — no saturation/hue for grayscale)
-- Random Gaussian blur
-- No `RandomGrayscale` (already grayscale)
-- Normalization using dataset-specific stats (computed via `src.data.compute_norm_stats`, or ImageNet fallback)
-
-### Classification Head
-
-```
-h (feature_dim) → Linear(512) → BN → ReLU → Dropout(0.4) → Linear(15) → logits
-```
-
-- Loss: `BCEWithLogitsLoss` with per-class `pos_weight` for class imbalance
-- Sigmoid applied at inference time (threshold = 0.5)
-- Differential LR: backbone gets 10× lower LR than classifier head
-
----
-
-## Reproducibility
-
-All training scripts set a global random seed (default: 42) across Python, NumPy, and PyTorch for reproducible results:
-
-```bash
-python train_pretrain.py --seed 42
-python train_finetune.py --seed 42
-```
-
-This also sets `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False` for deterministic CUDA operations.
-
-The seed can be configured via CLI (`--seed`) or in the YAML config (`training.seed`).
-
----
-
-## Model Export
-
-Export a fine-tuned model to ONNX and/or TorchScript for deployment or optimised inference.
-
-**Standalone export:**
 ```bash
 python export_model.py --checkpoint checkpoints/finetune/best_model_full_finetune.pth
 ```
 
-**Export after evaluation:**
-```bash
-python evaluate.py --checkpoint checkpoints/finetune/best_model_full_finetune.pth --export onnx torchscript
-```
+## Architecture Notes
 
-| Argument | Default | Description |
+**Encoder** — configurable via `model.backbone` in the configs. All backbones are adapted for single-channel grayscale input (first conv `in_channels: 3 → 1`; when using ImageNet weights the RGB kernels are averaged) and have their classification heads stripped. The projection and classification heads adapt to the backbone's feature dimension automatically.
+
+| Family | Backbones | Feature dim |
 |---|---|---|
-| `--checkpoint` | (required) | Path to fine-tuned model checkpoint |
-| `--format` | `onnx torchscript` | Export format(s): `onnx`, `torchscript`, or both |
-| `--output_dir` | `exports/` | Directory for exported models |
-| `--image_size` | from config | Input image size |
-| `--opset` | 17 | ONNX opset version |
-| `--device` | cpu | Device for export (CPU recommended for compatibility) |
+| ResNet | `resnet18` (default), `resnet34` | 512 |
+| ResNet | `resnet50`, `resnet101` | 2048 |
+| EfficientNet | `efficientnet_b0`, `efficientnet_b1` | 1280 |
+| EfficientNet | `efficientnet_b2` | 1408 |
+| ViT | `vit_b_16`, `vit_b_32` | 768 |
+| ViT | `vit_l_16` | 1024 |
 
-**Exported files:**
-- `exports/<checkpoint_name>.onnx` — ONNX model with dynamic batch size
-- `exports/<checkpoint_name>.pt` — TorchScript traced model
+**Projection head** — 2-layer MLP (`Linear → BN → ReLU → Linear → L2-normalise`, output dim 128), used only during pre-training and then discarded, per the SimCLR paper.
 
-Both formats support dynamic batch sizes and are verified against the original model during export. ONNX verification requires the `onnx` package (`pip install onnx`).
+**NT-Xent loss** — for N images (2N views), each view's positive is the other view of the same image; the remaining 2(N−1) views are in-batch negatives. Cosine similarity with temperature τ = 0.1.
 
----
+**Augmentations (X-ray adapted)** — random resized crop, rotation (±10°), brightness/contrast jitter (no saturation/hue — grayscale), Gaussian blur. **No horizontal flip**: chest anatomy is lateralized (heart on the left), and flip-invariance erases laterality cues needed for findings like Cardiomegaly (`horizontal_flip_prob` is configurable for ablations). Normalization uses dataset-specific stats from step 2.
 
-## Evaluation Results
+**Classifier head** — `Linear(512) → BN → ReLU → Dropout(0.4) → Linear(15)`, trained with `BCEWithLogitsLoss` + per-class `pos_weight` for class imbalance and a 10× lower learning rate on the backbone. Because `pos_weight` decalibrates logits, evaluation tunes per-class F1 thresholds on the **validation** set and applies them to the test set (AUC-ROC and AP are threshold-free).
 
-After completing SimCLR pre-training and supervised fine-tuning, the model is evaluated on the 25,596-image test set. The default configuration uses a **ResNet18** encoder pre-trained with SimCLR at batch size 256 (mixed precision), then fully fine-tuned with strong regularization.
+**Reproducibility** — a global seed (default 42, via `--seed` or `training.seed`) covers Python, NumPy, and PyTorch, with deterministic cuDNN enabled.
 
-**Test-set summary (`full_finetune`):**
+## Results
 
-| Metric | Value |
+Evaluated on the official 25,596-image test set. Default configuration: ResNet18 encoder, SimCLR pre-training at batch size 256 with mixed precision, then full fine-tuning.
+
+| Metric (`full_finetune`) | Value |
 |---|---|
 | Macro AUC-ROC | N/A |
 | Macro Average Precision | N/A |
-| Macro F1 (per-class thresholds tuned on validation) | N/A |
-| Best per-class AUC-ROC | N/A |
+| Macro F1 (val-tuned thresholds) | N/A |
 
-> F1 uses per-class decision thresholds tuned on the **validation** set (not the test set); AUC-ROC and Average Precision are threshold-free. See `logs/metrics_full_finetune.txt` for the full per-class table.
+See `logs/metrics_full_finetune.txt` for the per-class table.
 
-### 1. ROC Curves
-Per-class ROC curves for the top prevalent classes, demonstrating the model's discriminative ability across different pathologies.
+**ROC curves** — per-class curves for the most prevalent pathologies:
+
 ![ROC Curves](assets/roc_curves.png)
 
-### 2. Grad-CAM Interpretability
-Grad-CAM heatmaps overlaying the original X-rays to highlight the regions the model focuses on when predicting specific pathologies (e.g., Cardiomegaly).
+**Grad-CAM** — saliency overlays showing where the model looks when predicting Cardiomegaly:
+
 ![Grad-CAM](assets/gradcam_cardiomegaly.png)
 
-### 3. Training Loss
-Loss curves for both phases. **Left:** SimCLR NT-Xent loss decreases smoothly over 50 epochs (batch 256). **Right:** fine-tuning train/validation BCE loss — the two curves descend together and the validation loss settles into a flat plateau, indicating the strong regularization (dropout 0.4, weight decay 5e-2, colour jitter + random erasing) keeps overfitting in check. Early stopping halts training when validation loss stops improving.
+**Training loss** — left: SimCLR NT-Xent loss over pre-training; right: fine-tuning train/val BCE loss, where strong regularization (dropout 0.4, weight decay 5e-2, jitter + random erasing) keeps the curves close and early stopping halts on val-loss plateau:
+
 ![Loss Curves](assets/loss_curves.png)
